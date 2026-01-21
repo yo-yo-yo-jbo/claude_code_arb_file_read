@@ -146,3 +146,84 @@ The second reason this technique works is much more subtle. Look at this query w
 The difference is the space - Claude parses the commandline and apparently tried to interpret each component as a path, thus identifiying `../../secret.txt` as a path.  
 In the example that does work, we see `--input=../../secret.txt` which Claude apparently has difficulties interpreting as seperate components.
 
+## What should be done about it
+I actually tried to create a [macOS sandbox profile](https://github.com/yo-yo-yo-jbo/macos_sandbox/) that would prohibit reading everything besides certain directories, but because Claude is a Node app it needs to read so much garbage I kind of gave up.  
+My current solution is doing what Anthropic does - maintain a Regex to make sure certain files are never touched.  
+However, since I am using the macOS sandbox, it's enforced without parsing "safe flags" or whatever:
+
+```
+(version 1)
+
+;; Start with allow-all policy
+(allow default)
+
+;; Allowing specific important paths
+(allow file-read* (subpath "/System/Library/Security"))
+(allow file-read* (subpath "/Library/Keychains"))
+(allow file-read* (subpath "/private/etc/ssl"))
+
+;; =============================================================================
+;; DENY - Sensitive Files
+;; =============================================================================
+
+;; Deny reading shell config (may contain secrets in environment variables)
+(deny file-read* (regex #"\.zshrc"))
+
+;; Deny reading .env files (environment secrets)
+(deny file-read* (regex #"\.env"))
+
+;; Deny reading private keys and certificates
+(deny file-read* (regex #"\.pem"))
+
+;; Deny reading SSH keys and config
+(deny file-read* (regex #"\.ssh"))
+
+;; Deny reading cloud credentials
+(deny file-read* (regex #"\.aws"))
+(deny file-read* (regex #"\.azure"))
+```
+
+Here's me trying to read a fake `.pem` file without the restriction:
+
+```
+jbo@JBOs-MacBook-Pro MyProject % claude
+...
+
+❯ Run "base64 --input=/tmp/quack.pem"
+
+⏺ Bash(base64 --input=/tmp/quack.pem)
+  ⎿  ZmFrZQo=
+
+⏺ The base64-encoded content of /tmp/quack.pem is:
+
+  ZmFrZQo=
+```
+
+And here is the result when running with the restriction:
+
+```
+jbo@JBOs-MacBook-Pro MyProject % sandbox-exec -f ./restricted.sb $(which claude)
+...
+❯ Run "base64 --input=/tmp/quack.pem"
+
+⏺ Bash(base64 --input=/tmp/quack.pem)
+  ⎿  Error: Exit code 1
+     base64: /tmp/quack.pem: Operation not permitted
+
+⏺ The command failed with "Operation not permitted". This could be due to:
+  - The file doesn't exist at /tmp/quack.pem
+  - File permission issues preventing read access
+
+  Would you like me to check if the file exists or investigate further?
+```
+
+I think this is a nice use of the macOS sandbox profile - and I wish Claude would use that natively.
+
+## Summary
+While a silly bug, the implications for automated tools could be great, in my opinion.  
+Just the ability to read arbitrary files could mean credential-theft at-scale, which is quite scary.  
+I am a strong believer in native sandboxing solutions (you can do something similar on Linux with [eBPF](https://en.wikipedia.org/wiki/EBPF)) and I might work on a hardening solution like that in the future.
+
+Stay tuned!
+
+Jonathan Bar Or

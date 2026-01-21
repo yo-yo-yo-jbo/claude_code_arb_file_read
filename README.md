@@ -1,4 +1,4 @@
-# Claude Codea arbitrary file read
+# Claude Code arbitrary file read
 I recently started playing more and more with [Claude Code](https://code.claude.com/docs/en/overview) which is a "state-of-the-art" coding agent.  
 It's quite helpful in helping me prototyping a lot of my ideas.  
 In any case, I accidently discovered a bug and reported it.  
@@ -84,6 +84,8 @@ Run "cat ../../secret.txt"
 ## Base64 and why it happens
 Yes, it's that simple:
 
+![Arbitrary file read](arb_poc.png)
+
 ```
 ❯ Run "base64 --input=../../secret.txt"
 
@@ -143,3 +145,4 @@ The second reason this technique works is much more subtle. Look at this query w
 
 The difference is the space - Claude parses the commandline and apparently tried to interpret each component as a path, thus identifiying `../../secret.txt` as a path.  
 In the example that does work, we see `--input=../../secret.txt` which Claude apparently has difficulties interpreting as seperate components.
+
